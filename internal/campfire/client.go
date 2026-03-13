@@ -107,28 +107,25 @@ func NormalizeContract(c models.CampfireContract) (models.Contract, error) {
 	startDate, _ := time.Parse("2006-01-02", c.ContractStartDate)
 	endDate, _ := time.Parse("2006-01-02", c.ContractEndDate)
 
-	var contractMonths float64
-	if !startDate.IsZero() && !endDate.IsZero() && endDate.After(startDate) {
-		// More precise: count calendar months
-		years := endDate.Year() - startDate.Year()
-		months := int(endDate.Month()) - int(startDate.Month())
-		days := endDate.Day() - startDate.Day()
-		contractMonths = float64(years*12+months) + float64(days)/30.0
-		contractMonths = math.Round(contractMonths*100) / 100
-	}
-
 	// ARR methodology (Coder):
-	//   ARR = (total_contract_value / contract_months) * 12
+	//   ARR = (total_contract_value / contract_days) * 365
 	//
-	//   This correctly annualizes TCV across the full contract duration, consistent
-	//   with the 85/15 SSP allocation used in ASC 606 revenue recognition.
+	//   Uses exact day count for maximum precision — avoids month-length approximations.
+	//   Consistent with the 85/15 SSP allocation used in ASC 606 revenue recognition.
 	//   MRR is NOT used because it reflects only the support component post-allocation.
 	//
 	//   USD normalization uses exchange_rate locked at contract signing (spot-rate
 	//   methodology), so non-USD contracts are not re-measured at current rates.
+	var contractDays float64
+	var contractMonths float64 // retained for display purposes (approx months shown in UI)
+	if !startDate.IsZero() && !endDate.IsZero() && endDate.After(startDate) {
+		contractDays = endDate.Sub(startDate).Hours() / 24
+		contractMonths = math.Round(contractDays/30.4375*100) / 100
+	}
+
 	var arr float64
-	if contractMonths > 0 {
-		arr = math.Round((c.TotalContractValue/contractMonths)*12*100) / 100
+	if contractDays > 0 {
+		arr = math.Round((c.TotalContractValue/contractDays)*365*100) / 100
 	}
 
 	exchangeRate := c.ExchangeRate

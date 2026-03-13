@@ -363,7 +363,7 @@ export default function App() {
         </div>
 
         <div style={{ marginTop: 16, fontSize: 12, color: "#9ca3af", textAlign: "right" }}>
-          ARR = Total Contract Value ÷ Contract Months × 12 &nbsp;·&nbsp;
+          ARR = Total Contract Value ÷ Contract Days × 365 &nbsp;·&nbsp;
           Non-USD converted at signing-date spot rate &nbsp;·&nbsp;
           Auto-refreshes every 24h
         </div>
