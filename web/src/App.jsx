@@ -51,24 +51,26 @@ export default function App() {
   const [search, setSearch]       = useState("");
   const [sortCol, setSortCol]     = useState("arr_usd");
   const [sortDir, setSortDir]     = useState("desc");
+  const [asOf, setAsOf]           = useState(new Date().toISOString().split("T")[0]); // YYYY-MM-DD
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const [sumRes, conRes] = await Promise.all([
-        fetch(`${API_BASE}/api/summary`),
-        fetch(`${API_BASE}/api/contracts?status=${status}`),
+        fetch(`${API_BASE}/api/summary?as_of=${asOf}`),
+        fetch(`${API_BASE}/api/contracts?status=${status}&as_of=${asOf}`),
       ]);
       setSummary(await sumRes.json());
-      setContracts(await conRes.json());
+      const conData = await conRes.json();
+      setContracts(conData.contracts || []);
     } catch (e) {
       console.error("Fetch error", e);
     } finally {
       setLoading(false);
     }
-  }, [status]);
+  }, [status, asOf]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { fetchData(); }, [fetchData, asOf]);
 
   const handleSync = async (full = false) => {
     setSyncing(true);
@@ -137,6 +139,29 @@ export default function App() {
             <span style={{ fontSize: 12, color: "#9ca3af", marginLeft: 4 }}>via Campfire</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 13, color: "#6b7280", fontWeight: 500 }}>ARR as of</span>
+              <input
+                type="date"
+                value={asOf}
+                onChange={e => setAsOf(e.target.value)}
+                style={{
+                  padding: "7px 12px", borderRadius: 8, border: "1px solid #d1d5db",
+                  fontSize: 13, color: "#111827", background: "white", cursor: "pointer",
+                  outline: "none"
+                }}
+              />
+              <button
+                onClick={() => setAsOf(new Date().toISOString().split("T")[0])}
+                style={{
+                  padding: "7px 12px", borderRadius: 8, border: "1px solid #d1d5db",
+                  fontSize: 12, color: "#6b7280", background: "white", cursor: "pointer"
+                }}
+              >
+                Today
+              </button>
+            </div>
+            <div style={{ width: 1, height: 24, background: "#e5e7eb", margin: "0 4px" }} />
             {syncMsg && (
               <span style={{ fontSize: 13, color: syncMsg.startsWith("✓") ? "#065f46" : "#991b1b", fontWeight: 500 }}>
                 {syncMsg}
@@ -176,7 +201,7 @@ export default function App() {
             <StatCard
               label="Total ARR (USD)"
               value={fmtShort(summary.total_arr_usd)}
-              sub={`${fmt.format(summary.total_arr_usd)} exact`}
+              sub={`${fmt.format(summary.total_arr_usd)} · as of ${asOf}`}
               accent="#1a56db"
             />
             <StatCard
@@ -288,8 +313,7 @@ export default function App() {
                 </thead>
                 <tbody>
                   {filtered.map((c, i) => {
-                    const today = new Date().toISOString().split("T")[0];
-                    const isArrActive = c.is_evergreen || (c.contract_start_date <= today && c.contract_end_date >= today);
+                    const isArrActive = c.is_evergreen || (c.contract_start_date <= asOf && c.contract_end_date >= asOf);
                     return (
                     <tr
                       key={c.campfire_id}
@@ -340,16 +364,14 @@ export default function App() {
                 <tfoot>
                   <tr style={{ background: "#f9fafb", borderTop: "2px solid #e5e7eb" }}>
                     <td colSpan={8} style={{ padding: "12px 16px", fontWeight: 700, color: "#374151", fontSize: 13 }}>
-                      TOTAL — ARR as of Today ({filtered.filter(c => {
-                        const today = new Date().toISOString().split("T")[0];
-                        return c.is_evergreen || (c.contract_start_date <= today && c.contract_end_date >= today);
+                      TOTAL — ARR as of {asOf} ({filtered.filter(c => {
+                        return c.is_evergreen || (c.contract_start_date <= asOf && c.contract_end_date >= asOf);
                       }).length} contracts)
                     </td>
                     <td style={{ padding: "12px 16px", textAlign: "right", fontWeight: 700, color: "#111827", fontSize: 14 }}>
                       {fmt.format(filtered
                         .filter(c => {
-                          const today = new Date().toISOString().split("T")[0];
-                          return c.is_evergreen || (c.contract_start_date <= today && c.contract_end_date >= today);
+                          return c.is_evergreen || (c.contract_start_date <= asOf && c.contract_end_date >= asOf);
                         })
                         .reduce((s, c) => s + (c.arr_usd || 0), 0)
                       )}

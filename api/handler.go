@@ -41,12 +41,14 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 // handleSummary returns aggregated ARR metrics.
+// Optional query param: ?as_of=2025-12-31 (defaults to today)
 func (h *Handler) handleSummary(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	summary, err := h.db.GetSummary()
+	asOf := parseAsOf(r)
+	summary, err := h.db.GetSummary(asOf)
 	if err != nil {
 		jsonError(w, "failed to get summary", http.StatusInternalServerError)
 		log.Printf("ERROR summary: %v", err)
@@ -56,6 +58,7 @@ func (h *Handler) handleSummary(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleContracts returns the full contract list, optionally filtered by ?status=ACTIVE|CHURNED|ALL
+// The as_of date is returned in the response wrapper so the frontend can apply date-based filtering.
 func (h *Handler) handleContracts(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -71,7 +74,12 @@ func (h *Handler) handleContracts(w http.ResponseWriter, r *http.Request) {
 		log.Printf("ERROR contracts: %v", err)
 		return
 	}
-	jsonOK(w, contracts)
+	// Return as_of so the frontend knows which date to apply for ARR filtering
+	asOf := parseAsOf(r)
+	jsonOK(w, map[string]interface{}{
+		"as_of":     asOf.Format("2006-01-02"),
+		"contracts": contracts,
+	})
 }
 
 // handleSync triggers a Campfire sync. Uses incremental mode by default;
@@ -175,6 +183,17 @@ func (h *Handler) StartScheduler() {
 			}
 		}
 	}()
+}
+
+// parseAsOf reads the ?as_of=YYYY-MM-DD query param, defaulting to today.
+func parseAsOf(r *http.Request) time.Time {
+	raw := r.URL.Query().Get("as_of")
+	if raw != "" {
+		if t, err := time.Parse("2006-01-02", raw); err == nil {
+			return t
+		}
+	}
+	return time.Now().UTC()
 }
 
 // withCORS wraps a handler with permissive CORS headers for local dev / Vercel.

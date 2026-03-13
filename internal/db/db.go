@@ -209,9 +209,14 @@ func (db *DB) ListContracts(statusFilter string) ([]models.Contract, error) {
 	return contracts, rows.Err()
 }
 
-// GetSummary returns aggregated ARR metrics.
-func (db *DB) GetSummary() (models.Summary, error) {
+// GetSummary returns aggregated ARR metrics as of the given date.
+// If asOf is zero, defaults to today.
+func (db *DB) GetSummary(asOf time.Time) (models.Summary, error) {
 	var s models.Summary
+	if asOf.IsZero() {
+		asOf = time.Now().UTC()
+	}
+	asOfDate := asOf.Format("2006-01-02")
 
 	err := db.conn.QueryRow(`
 		SELECT
@@ -221,9 +226,9 @@ func (db *DB) GetSummary() (models.Summary, error) {
 			COUNT(*) FILTER (WHERE is_evergreen)                   AS evergreen_contracts
 		FROM contracts
 		WHERE status = 'ACTIVE'
-		  AND contract_start_date <= CURRENT_DATE
-		  AND (contract_end_date >= CURRENT_DATE OR is_evergreen = true)
-	`).Scan(&s.TotalARRUSD, &s.TotalMRRUSD, &s.ActiveContracts, &s.EvergreenContracts)
+		  AND contract_start_date <= $1
+		  AND (contract_end_date >= $1 OR is_evergreen = true)
+	`, asOfDate).Scan(&s.TotalARRUSD, &s.TotalMRRUSD, &s.ActiveContracts, &s.EvergreenContracts)
 	if err != nil {
 		return s, fmt.Errorf("querying summary: %w", err)
 	}
@@ -233,11 +238,11 @@ func (db *DB) GetSummary() (models.Summary, error) {
 		SELECT currency, COALESCE(SUM(arr),0), COALESCE(SUM(arr_usd),0), COUNT(*)
 		FROM contracts
 		WHERE status = 'ACTIVE'
-		  AND contract_start_date <= CURRENT_DATE
-		  AND (contract_end_date >= CURRENT_DATE OR is_evergreen = true)
+		  AND contract_start_date <= $1
+		  AND (contract_end_date >= $1 OR is_evergreen = true)
 		GROUP BY currency
 		ORDER BY SUM(arr_usd) DESC
-	`)
+	`, asOfDate)
 	if err != nil {
 		return s, fmt.Errorf("querying currency breakdown: %w", err)
 	}
