@@ -216,6 +216,8 @@ func (db *DB) GetSummary() (models.Summary, error) {
 			COUNT(*) FILTER (WHERE is_evergreen)                   AS evergreen_contracts
 		FROM contracts
 		WHERE status = 'ACTIVE'
+		  AND contract_start_date <= CURRENT_DATE
+		  AND (contract_end_date >= CURRENT_DATE OR is_evergreen = true)
 	`).Scan(&s.TotalARRUSD, &s.TotalMRRUSD, &s.ActiveContracts, &s.EvergreenContracts)
 	if err != nil {
 		return s, fmt.Errorf("querying summary: %w", err)
@@ -226,6 +228,8 @@ func (db *DB) GetSummary() (models.Summary, error) {
 		SELECT currency, COALESCE(SUM(arr),0), COALESCE(SUM(arr_usd),0), COUNT(*)
 		FROM contracts
 		WHERE status = 'ACTIVE'
+		  AND contract_start_date <= CURRENT_DATE
+		  AND (contract_end_date >= CURRENT_DATE OR is_evergreen = true)
 		GROUP BY currency
 		ORDER BY SUM(arr_usd) DESC
 	`)

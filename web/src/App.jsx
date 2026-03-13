@@ -287,12 +287,16 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((c, i) => (
+                  {filtered.map((c, i) => {
+                    const today = new Date().toISOString().split("T")[0];
+                    const isArrActive = c.is_evergreen || (c.contract_start_date <= today && c.contract_end_date >= today);
+                    return (
                     <tr
                       key={c.campfire_id}
                       style={{
                         borderBottom: "1px solid #f3f4f6",
-                        background: i % 2 === 0 ? "white" : "#fafafa",
+                        background: !isArrActive ? "#fafafa" : (i % 2 === 0 ? "white" : "#fafafa"),
+                        opacity: isArrActive ? 1 : 0.5,
                       }}
                     >
                       <td style={{ padding: "12px 16px", fontWeight: 500, color: "#111827" }}>
@@ -330,15 +334,25 @@ export default function App() {
                         <Badge status={c.status} />
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
                 <tfoot>
                   <tr style={{ background: "#f9fafb", borderTop: "2px solid #e5e7eb" }}>
                     <td colSpan={8} style={{ padding: "12px 16px", fontWeight: 700, color: "#374151", fontSize: 13 }}>
-                      TOTAL ({filtered.length} contracts)
+                      TOTAL — ARR as of Today ({filtered.filter(c => {
+                        const today = new Date().toISOString().split("T")[0];
+                        return c.is_evergreen || (c.contract_start_date <= today && c.contract_end_date >= today);
+                      }).length} contracts)
                     </td>
                     <td style={{ padding: "12px 16px", textAlign: "right", fontWeight: 700, color: "#111827", fontSize: 14 }}>
-                      {fmt.format(filtered.reduce((s, c) => s + (c.arr_usd || 0), 0))}
+                      {fmt.format(filtered
+                        .filter(c => {
+                          const today = new Date().toISOString().split("T")[0];
+                          return c.is_evergreen || (c.contract_start_date <= today && c.contract_end_date >= today);
+                        })
+                        .reduce((s, c) => s + (c.arr_usd || 0), 0)
+                      )}
                     </td>
                     <td />
                   </tr>
