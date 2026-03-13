@@ -119,7 +119,7 @@ export default function App() {
     { key: "currency",             label: "CCY",      align: "center" },
     { key: "contract_start_date",  label: "Start" },
     { key: "contract_end_date",    label: "End" },
-    { key: "contract_months",      label: "Months",   align: "right" },
+    { key: "contract_days",        label: "Days",     align: "right" },
     { key: "total_contract_value", label: "TCV",      align: "right" },
     { key: "arr",                  label: "ARR (native)", align: "right" },
     { key: "arr_usd",              label: "ARR (USD)", align: "right" },
@@ -319,7 +319,7 @@ export default function App() {
                         {c.is_evergreen ? "Evergreen" : fmtDate(c.contract_end_date)}
                       </td>
                       <td style={{ padding: "12px 16px", textAlign: "right", color: "#6b7280" }}>
-                        {c.contract_months > 0 ? c.contract_months.toFixed(1) : "—"}
+                        {c.contract_days > 0 ? Math.round(c.contract_days) : "—"}
                       </td>
                       <td style={{ padding: "12px 16px", textAlign: "right", color: "#374151" }}>
                         {c.total_contract_value > 0 ? fmt.format(c.total_contract_value) : "—"}

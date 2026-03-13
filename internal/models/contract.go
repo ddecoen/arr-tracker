@@ -60,7 +60,8 @@ type Contract struct {
 	// ARR_USD uses exchange_rate locked at signing (your spot-rate methodology)
 	ARRUSD             float64   `json:"arr_usd"`
 	ExchangeRate       float64   `json:"exchange_rate"`
-	ContractMonths     float64   `json:"contract_months"`
+	ContractDays       float64   `json:"contract_days"`
+	ContractMonths     float64   `json:"contract_months"` // approximate, for display
 	IsEvergreen        bool      `json:"is_evergreen"`
 	OpportunityID      string    `json:"opportunity_id"`
 	LastModifiedAt     time.Time `json:"last_modified_at"`

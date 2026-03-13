@@ -119,7 +119,7 @@ func NormalizeContract(c models.CampfireContract) (models.Contract, error) {
 	var contractDays float64
 	var contractMonths float64 // retained for display purposes (approx months shown in UI)
 	if !startDate.IsZero() && !endDate.IsZero() && endDate.After(startDate) {
-		contractDays = endDate.Sub(startDate).Hours() / 24
+		contractDays = endDate.Sub(startDate).Hours()/24 + 1 // +1: end date is inclusive
 		contractMonths = math.Round(contractDays/30.4375*100) / 100
 	}
 
@@ -151,6 +151,7 @@ func NormalizeContract(c models.CampfireContract) (models.Contract, error) {
 		ARR:                arr,
 		ARRUSD:             arrUSD,
 		ExchangeRate:       exchangeRate,
+		ContractDays:       contractDays,
 		ContractMonths:     contractMonths,
 		IsEvergreen:        c.IsEvergreen,
 		OpportunityID:      c.CustomFieldOpportunityID,

@@ -51,12 +51,16 @@ func (db *DB) Migrate() error {
 			arr                  NUMERIC(18,2) NOT NULL DEFAULT 0,
 			arr_usd              NUMERIC(18,2) NOT NULL DEFAULT 0,
 			exchange_rate        NUMERIC(12,6) NOT NULL DEFAULT 1,
+			contract_days        NUMERIC(8,2)  NOT NULL DEFAULT 0,
 			contract_months      NUMERIC(8,2)  NOT NULL DEFAULT 0,
 			is_evergreen         BOOLEAN NOT NULL DEFAULT FALSE,
 			opportunity_id       TEXT NOT NULL DEFAULT '',
 			last_modified_at     TIMESTAMPTZ NOT NULL,
 			synced_at            TIMESTAMPTZ NOT NULL
 		);
+
+		-- Add contract_days if upgrading from earlier version
+		ALTER TABLE contracts ADD COLUMN IF NOT EXISTS contract_days NUMERIC(8,2) NOT NULL DEFAULT 0;
 
 		CREATE INDEX IF NOT EXISTS idx_contracts_status    ON contracts(status);
 		CREATE INDEX IF NOT EXISTS idx_contracts_arr_usd   ON contracts(arr_usd DESC);
@@ -94,10 +98,10 @@ func (db *DB) UpsertContracts(contracts []models.Contract) (int, error) {
 			campfire_id, client_name, deal_name, deal_id, status,
 			currency, billing_frequency, contract_start_date, contract_end_date,
 			closed_date, total_contract_value, total_billed, total_mrr,
-			arr, arr_usd, exchange_rate, contract_months, is_evergreen,
+			arr, arr_usd, exchange_rate, contract_days, contract_months, is_evergreen,
 			opportunity_id, last_modified_at, synced_at
 		) VALUES (
-			$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21
+			$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22
 		)
 		ON CONFLICT (campfire_id) DO UPDATE SET
 			client_name          = EXCLUDED.client_name,
@@ -115,6 +119,7 @@ func (db *DB) UpsertContracts(contracts []models.Contract) (int, error) {
 			arr                  = EXCLUDED.arr,
 			arr_usd              = EXCLUDED.arr_usd,
 			exchange_rate        = EXCLUDED.exchange_rate,
+			contract_days        = EXCLUDED.contract_days,
 			contract_months      = EXCLUDED.contract_months,
 			is_evergreen         = EXCLUDED.is_evergreen,
 			opportunity_id       = EXCLUDED.opportunity_id,
@@ -143,7 +148,7 @@ func (db *DB) UpsertContracts(contracts []models.Contract) (int, error) {
 			c.CampfireID, c.ClientName, c.DealName, c.DealID, c.Status,
 			c.Currency, c.BillingFrequency, startDate, endDate,
 			closedDate, c.TotalContractValue, c.TotalBilled, c.TotalMRR,
-			c.ARR, c.ARRUSD, c.ExchangeRate, c.ContractMonths, c.IsEvergreen,
+			c.ARR, c.ARRUSD, c.ExchangeRate, c.ContractDays, c.ContractMonths, c.IsEvergreen,
 			c.OpportunityID, c.LastModifiedAt, c.SyncedAt,
 		)
 		if err != nil {
@@ -169,7 +174,7 @@ func (db *DB) ListContracts(statusFilter string) ([]models.Contract, error) {
 			COALESCE(contract_end_date::text, ''),
 			COALESCE(closed_date::text, ''),
 			total_contract_value, total_billed, total_mrr,
-			arr, arr_usd, exchange_rate, contract_months, is_evergreen,
+			arr, arr_usd, exchange_rate, contract_days, contract_months, is_evergreen,
 			COALESCE(opportunity_id, ''), last_modified_at, synced_at
 		FROM contracts
 	`
@@ -194,7 +199,7 @@ func (db *DB) ListContracts(statusFilter string) ([]models.Contract, error) {
 			&c.Currency, &c.BillingFrequency,
 			&c.ContractStartDate, &c.ContractEndDate, &c.ClosedDate,
 			&c.TotalContractValue, &c.TotalBilled, &c.TotalMRR,
-			&c.ARR, &c.ARRUSD, &c.ExchangeRate, &c.ContractMonths, &c.IsEvergreen,
+			&c.ARR, &c.ARRUSD, &c.ExchangeRate, &c.ContractDays, &c.ContractMonths, &c.IsEvergreen,
 			&c.OpportunityID, &c.LastModifiedAt, &c.SyncedAt,
 		); err != nil {
 			return nil, fmt.Errorf("scanning contract row: %w", err)
