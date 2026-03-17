@@ -178,7 +178,8 @@ func (db *DB) ListContracts(statusFilter string) ([]models.Contract, error) {
 			COALESCE(closed_date::text, ''),
 			total_contract_value, total_billed, total_mrr,
 			arr, arr_usd, exchange_rate, contract_days, contract_months, is_evergreen,
-			COALESCE(opportunity_id, ''), last_modified_at, synced_at
+			COALESCE(opportunity_id, ''), last_modified_at, synced_at,
+			COALESCE(notes, '')
 		FROM contracts
 	`
 	args := []interface{}{}
