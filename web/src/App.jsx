@@ -41,6 +41,55 @@ function Badge({ status }) {
   );
 }
 
+function NoteCell({ campfireID, initial, onSave }) {
+  const [value, setValue] = useState(initial);
+  const [editing, setEditing] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const handleBlur = async () => {
+    setEditing(false);
+    if (value !== initial) {
+      await onSave(campfireID, value);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    }
+  };
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        onBlur={handleBlur}
+        onKeyDown={e => { if (e.key === "Enter") e.target.blur(); if (e.key === "Escape") { setValue(initial); setEditing(false); } }}
+        style={{
+          width: "100%", padding: "5px 8px", borderRadius: 6,
+          border: "1px solid #93c5fd", fontSize: 12, outline: "none",
+          background: "white", color: "#111827"
+        }}
+      />
+    );
+  }
+
+  return (
+    <div
+      onClick={() => setEditing(true)}
+      title="Click to add a note"
+      style={{
+        minHeight: 28, padding: "4px 8px", borderRadius: 6, cursor: "text",
+        fontSize: 12, color: value ? "#374151" : "#d1d5db",
+        border: "1px solid transparent",
+        transition: "border-color .15s",
+      }}
+      onMouseEnter={e => e.currentTarget.style.borderColor = "#e5e7eb"}
+      onMouseLeave={e => e.currentTarget.style.borderColor = "transparent"}
+    >
+      {saved ? <span style={{ color: "#059669" }}>✓ Saved</span> : (value || "Add note…")}
+    </div>
+  );
+}
+
 function buildGroups(contracts, asOf) {
   const map = {};
   for (const c of contracts) {
@@ -101,6 +150,18 @@ export default function App() {
     } finally {
       setSyncing(false);
       setTimeout(() => setSyncMsg(null), 6000);
+    }
+  };
+
+  const saveNote = async (campfireID, note) => {
+    try {
+      await fetch(`${API_BASE}/api/note?id=${campfireID}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ note }),
+      });
+    } catch (e) {
+      console.error("Failed to save note", e);
     }
   };
 
@@ -248,6 +309,7 @@ export default function App() {
                     <th style={{ ...thStyle, textAlign: "right" }}>ARR (native)</th>
                     <th style={{ ...thStyle, textAlign: "right" }}>ARR (USD)</th>
                     <th style={{ ...thStyle, textAlign: "center" }}>Status</th>
+                    <th style={{ ...thStyle, textAlign: "left", minWidth: 200 }}>Notes</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -291,6 +353,15 @@ export default function App() {
                           <td style={{ padding: "13px 16px", textAlign: "center" }}>
                             {!multi && <Badge status={solo?.status} />}
                           </td>
+                          <td style={{ padding: "13px 8px" }}>
+                            {!multi && (
+                              <NoteCell
+                                campfireID={solo?.campfire_id}
+                                initial={solo?.notes || ""}
+                                onSave={saveNote}
+                              />
+                            )}
+                          </td>
                         </tr>
 
                         {/* Expanded deal rows */}
@@ -318,6 +389,13 @@ export default function App() {
                               {c._isArrActive && c.arr_usd > 0 ? fmt.format(c.arr_usd) : "—"}
                             </td>
                             <td style={{ padding: "10px 16px", textAlign: "center" }}><Badge status={c.status} /></td>
+                            <td style={{ padding: "10px 8px" }}>
+                              <NoteCell
+                                campfireID={c.campfire_id}
+                                initial={c.notes || ""}
+                                onSave={saveNote}
+                              />
+                            </td>
                           </tr>
                         ))}
                       </>

@@ -66,6 +66,7 @@ type Contract struct {
 	OpportunityID      string    `json:"opportunity_id"`
 	LastModifiedAt     time.Time `json:"last_modified_at"`
 	SyncedAt           time.Time `json:"synced_at"`
+	Notes              string    `json:"notes"`
 }
 
 // Summary is the aggregated ARR view returned by /api/summary.

@@ -62,6 +62,9 @@ func (db *DB) Migrate() error {
 		-- Add contract_days if upgrading from earlier version
 		ALTER TABLE contracts ADD COLUMN IF NOT EXISTS contract_days NUMERIC(8,2) NOT NULL DEFAULT 0;
 
+		-- Add notes column for manual annotations
+		ALTER TABLE contracts ADD COLUMN IF NOT EXISTS notes TEXT NOT NULL DEFAULT '';
+
 		CREATE INDEX IF NOT EXISTS idx_contracts_status    ON contracts(status);
 		CREATE INDEX IF NOT EXISTS idx_contracts_arr_usd   ON contracts(arr_usd DESC);
 		CREATE INDEX IF NOT EXISTS idx_contracts_synced_at ON contracts(synced_at DESC);
@@ -200,7 +203,7 @@ func (db *DB) ListContracts(statusFilter string) ([]models.Contract, error) {
 			&c.ContractStartDate, &c.ContractEndDate, &c.ClosedDate,
 			&c.TotalContractValue, &c.TotalBilled, &c.TotalMRR,
 			&c.ARR, &c.ARRUSD, &c.ExchangeRate, &c.ContractDays, &c.ContractMonths, &c.IsEvergreen,
-			&c.OpportunityID, &c.LastModifiedAt, &c.SyncedAt,
+			&c.OpportunityID, &c.LastModifiedAt, &c.SyncedAt, &c.Notes,
 		); err != nil {
 			return nil, fmt.Errorf("scanning contract row: %w", err)
 		}
@@ -263,6 +266,16 @@ func (db *DB) GetSummary(asOf time.Time) (models.Summary, error) {
 	}
 
 	return s, nil
+}
+
+// UpdateNote saves a user-written note for a contract by campfire_id.
+// Notes are never overwritten by the sync process.
+func (db *DB) UpdateNote(campfireID int, note string) error {
+	_, err := db.conn.Exec(
+		`UPDATE contracts SET notes = $1 WHERE campfire_id = $2`,
+		note, campfireID,
+	)
+	return err
 }
 
 // LogSync records a sync operation result.
