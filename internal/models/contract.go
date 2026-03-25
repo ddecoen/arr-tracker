@@ -71,6 +71,9 @@ type Contract struct {
 	// Set manually for edge cases (contract modifications, step-up deals, credits).
 	// Never overwritten by sync.
 	ArrOverride        float64   `json:"arr_override"`
+	// ArrOverrideUntil: if set, override only applies while asOf <= this date.
+	// After this date the calculated ARR is used automatically.
+	ArrOverrideUntil   string    `json:"arr_override_until"`
 }
 
 // Summary is the aggregated ARR view returned by /api/summary.

@@ -68,6 +68,9 @@ func (db *DB) Migrate() error {
 		-- Add arr_override for manual ARR corrections (NULL = use calculated value)
 		ALTER TABLE contracts ADD COLUMN IF NOT EXISTS arr_override NUMERIC(18,2) NULL;
 
+		-- Add arr_override_until: override reverts to calculated after this date
+		ALTER TABLE contracts ADD COLUMN IF NOT EXISTS arr_override_until DATE NULL;
+
 		CREATE INDEX IF NOT EXISTS idx_contracts_status    ON contracts(status);
 		CREATE INDEX IF NOT EXISTS idx_contracts_arr_usd   ON contracts(arr_usd DESC);
 		CREATE INDEX IF NOT EXISTS idx_contracts_synced_at ON contracts(synced_at DESC);
@@ -183,7 +186,8 @@ func (db *DB) ListContracts(statusFilter string) ([]models.Contract, error) {
 			arr, arr_usd, exchange_rate, contract_days, contract_months, is_evergreen,
 			COALESCE(opportunity_id, ''), last_modified_at, synced_at,
 			COALESCE(notes, ''),
-			COALESCE(arr_override, 0)
+			COALESCE(arr_override, 0),
+			COALESCE(arr_override_until::text, '')
 		FROM contracts
 	`
 	args := []interface{}{}
@@ -208,7 +212,7 @@ func (db *DB) ListContracts(statusFilter string) ([]models.Contract, error) {
 			&c.ContractStartDate, &c.ContractEndDate, &c.ClosedDate,
 			&c.TotalContractValue, &c.TotalBilled, &c.TotalMRR,
 			&c.ARR, &c.ARRUSD, &c.ExchangeRate, &c.ContractDays, &c.ContractMonths, &c.IsEvergreen,
-			&c.OpportunityID, &c.LastModifiedAt, &c.SyncedAt, &c.Notes, &c.ArrOverride,
+			&c.OpportunityID, &c.LastModifiedAt, &c.SyncedAt, &c.Notes, &c.ArrOverride, &c.ArrOverrideUntil,
 		); err != nil {
 			return nil, fmt.Errorf("scanning contract row: %w", err)
 		}
@@ -228,8 +232,14 @@ func (db *DB) GetSummary(asOf time.Time) (models.Summary, error) {
 
 	err := db.conn.QueryRow(`
 		SELECT
-			COALESCE(SUM(COALESCE(arr_override, arr_usd)), 0)      AS total_arr_usd,
-			COALESCE(SUM(COALESCE(arr_override, arr_usd)) / 12.0, 0) AS total_mrr_usd,
+			COALESCE(SUM(CASE
+				WHEN arr_override IS NOT NULL
+				  AND (arr_override_until IS NULL OR arr_override_until >= $1::date)
+				THEN arr_override ELSE arr_usd END), 0) AS total_arr_usd,
+			COALESCE(SUM(CASE
+				WHEN arr_override IS NOT NULL
+				  AND (arr_override_until IS NULL OR arr_override_until >= $1::date)
+				THEN arr_override ELSE arr_usd END) / 12.0, 0) AS total_mrr_usd,
 			COUNT(*)                                                AS active_contracts,
 			COUNT(*) FILTER (WHERE is_evergreen)                   AS evergreen_contracts
 		FROM contracts
@@ -243,7 +253,11 @@ func (db *DB) GetSummary(asOf time.Time) (models.Summary, error) {
 	s.ContractCount = s.ActiveContracts
 
 	rows, err := db.conn.Query(`
-		SELECT currency, COALESCE(SUM(arr),0), COALESCE(SUM(COALESCE(arr_override, arr_usd)),0), COUNT(*)
+		SELECT currency, COALESCE(SUM(arr),0),
+			COALESCE(SUM(CASE
+				WHEN arr_override IS NOT NULL
+				  AND (arr_override_until IS NULL OR arr_override_until >= $1::date)
+				THEN arr_override ELSE arr_usd END), 0), COUNT(*)
 		FROM contracts
 		WHERE status = 'ACTIVE'
 		  AND contract_start_date <= $1
@@ -274,16 +288,20 @@ func (db *DB) GetSummary(asOf time.Time) (models.Summary, error) {
 }
 
 // UpdateArrOverride saves a manual ARR override for a contract.
-// Pass 0 to clear the override and revert to the calculated value.
+// Pass 0 to clear the override. Pass empty string for until to clear the expiry.
 // Never overwritten by sync.
-func (db *DB) UpdateArrOverride(campfireID int, override float64) error {
+func (db *DB) UpdateArrOverride(campfireID int, override float64, until string) error {
 	var val interface{}
 	if override != 0 {
 		val = override
-	} // nil = clear override
+	}
+	var untilVal interface{}
+	if until != "" {
+		untilVal = until
+	}
 	_, err := db.conn.Exec(
-		`UPDATE contracts SET arr_override = $1 WHERE campfire_id = $2`,
-		val, campfireID,
+		`UPDATE contracts SET arr_override = $1, arr_override_until = $2 WHERE campfire_id = $3`,
+		val, untilVal, campfireID,
 	)
 	return err
 }

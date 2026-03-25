@@ -197,6 +197,7 @@ func (h *Handler) handleOverride(w http.ResponseWriter, r *http.Request) {
 	}
 	var body struct {
 		ArrOverride float64 `json:"arr_override"`
+		ArrOverrideUntil string `json:"arr_override_until"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		jsonError(w, "invalid request body", http.StatusBadRequest)
@@ -208,7 +209,7 @@ func (h *Handler) handleOverride(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "missing or invalid id param", http.StatusBadRequest)
 		return
 	}
-	if err := h.db.UpdateArrOverride(campfireID, body.ArrOverride); err != nil {
+	if err := h.db.UpdateArrOverride(campfireID, body.ArrOverride, body.ArrOverrideUntil); err != nil {
 		jsonError(w, "failed to save override", http.StatusInternalServerError)
 		log.Printf("ERROR override: %v", err)
 		return
