@@ -90,6 +90,89 @@ function NoteCell({ campfireID, initial, onSave }) {
   );
 }
 
+function OverrideCell({ campfireID, calculatedArr, initial, onSave }) {
+  const [value, setValue] = useState(initial > 0 ? String(initial) : "");
+  const [editing, setEditing] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const fmt = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+
+  const handleBlur = async () => {
+    setEditing(false);
+    const numeric = parseFloat(value.replace(/[^0-9.]/g, "")) || 0;
+    if (numeric !== initial) {
+      await onSave(campfireID, numeric);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    }
+  };
+
+  const handleClear = async (e) => {
+    e.stopPropagation();
+    setValue("");
+    await onSave(campfireID, 0);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const hasOverride = initial > 0;
+
+  if (editing) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        <input
+          autoFocus
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          onBlur={handleBlur}
+          onKeyDown={e => { if (e.key === "Enter") e.target.blur(); if (e.key === "Escape") { setValue(initial > 0 ? String(initial) : ""); setEditing(false); } }}
+          placeholder="e.g. 2568500"
+          style={{ width: 120, padding: "5px 8px", borderRadius: 6, border: "1px solid #f97316", fontSize: 12, outline: "none", background: "white", color: "#111827" }}
+        />
+        {hasOverride && (
+          <button onClick={handleClear} title="Clear override"
+            style={{ fontSize: 11, color: "#ef4444", background: "none", border: "none", cursor: "pointer", padding: "2px 4px" }}>
+            ✕ clear
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        {hasOverride && (
+          <span style={{ background: "#fff7ed", color: "#c2410c", border: "1px solid #fed7aa", borderRadius: 4, fontSize: 10, fontWeight: 700, padding: "1px 5px", letterSpacing: ".03em" }}>
+            ✎ OVERRIDE
+          </span>
+        )}
+        <div
+          onClick={() => setEditing(true)}
+          title={hasOverride ? "Click to edit override" : "Click to set ARR override"}
+          style={{
+            padding: "3px 6px", borderRadius: 6, cursor: "text", fontSize: 12,
+            fontWeight: hasOverride ? 700 : 400,
+            color: hasOverride ? "#c2410c" : "#9ca3af",
+            border: "1px solid transparent",
+          }}
+          onMouseEnter={e => e.currentTarget.style.borderColor = "#e5e7eb"}
+          onMouseLeave={e => e.currentTarget.style.borderColor = "transparent"}
+        >
+          {saved ? <span style={{ color: "#059669" }}>✓ Saved</span>
+            : hasOverride ? fmt.format(initial)
+            : "Set override…"}
+        </div>
+      </div>
+      {hasOverride && (
+        <div style={{ fontSize: 11, color: "#9ca3af", paddingLeft: 6 }}>
+          calc: {fmt.format(calculatedArr)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function buildGroups(contracts, asOf) {
   const map = {};
   for (const c of contracts) {
@@ -97,7 +180,8 @@ function buildGroups(contracts, asOf) {
     if (!map[key]) map[key] = { name: key, contracts: [], totalARR: 0, activeCount: 0 };
     const isActive = c.is_evergreen || (c.contract_start_date <= asOf && c.contract_end_date >= asOf);
     map[key].contracts.push({ ...c, _isArrActive: isActive });
-    if (isActive) { map[key].totalARR += c.arr_usd || 0; map[key].activeCount++; }
+    const effectiveArr = c.arr_override > 0 ? c.arr_override : (c.arr_usd || 0);
+    if (isActive) { map[key].totalARR += effectiveArr; map[key].activeCount++; }
   }
   return Object.values(map).sort((a, b) => b.totalARR - a.totalARR);
 }
@@ -153,6 +237,20 @@ export default function App() {
     }
   };
 
+  const saveOverride = async (campfireID, value) => {
+    try {
+      await fetch(`${API_BASE}/api/override?id=${campfireID}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ arr_override: parseFloat(value) || 0 }),
+      });
+      // Refresh data so summary cards update immediately
+      fetchData();
+    } catch (e) {
+      console.error("Failed to save override", e);
+    }
+  };
+
   const saveNote = async (campfireID, note) => {
     try {
       await fetch(`${API_BASE}/api/note?id=${campfireID}`, {
@@ -178,6 +276,8 @@ export default function App() {
 
   const groups = buildGroups(filtered, asOf);
   const totalARR = groups.reduce((s, g) => s + g.totalARR, 0);
+  // effectiveArr: use override if set, else calculated arr_usd
+  const effectiveArrUSD = (c) => c.arr_override > 0 ? c.arr_override : (c.arr_usd || 0);
   const totalContracts = filtered.filter(c =>
     c.is_evergreen || (c.contract_start_date <= asOf && c.contract_end_date >= asOf)
   ).length;
@@ -310,6 +410,7 @@ export default function App() {
                     <th style={{ ...thStyle, textAlign: "right" }}>ARR (USD)</th>
                     <th style={{ ...thStyle, textAlign: "center" }}>Status</th>
                     <th style={{ ...thStyle, textAlign: "left", minWidth: 200 }}>Notes</th>
+                    <th style={{ ...thStyle, textAlign: "left", minWidth: 160 }}>ARR Override</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -348,7 +449,12 @@ export default function App() {
                           <td style={{ padding: "13px 16px", textAlign: "right", color: "#374151" }}>{!multi && solo?.total_contract_value > 0 ? fmt.format(solo.total_contract_value) : ""}</td>
                           <td style={{ padding: "13px 16px", textAlign: "right", color: "#374151" }}>{!multi && solo?.arr > 0 ? fmt.format(solo.arr) : ""}</td>
                           <td style={{ padding: "13px 16px", textAlign: "right", fontWeight: 700, color: "#1e3a8a" }}>
-                            {group.totalARR > 0 ? fmt.format(group.totalARR) : "—"}
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
+                              {group.contracts.some(c => c.arr_override > 0) && (
+                                <span style={{ background: "#fff7ed", color: "#c2410c", border: "1px solid #fed7aa", borderRadius: 4, fontSize: 10, fontWeight: 700, padding: "1px 5px" }}>✎ OVERRIDE</span>
+                              )}
+                              {group.totalARR > 0 ? fmt.format(group.totalARR) : "—"}
+                            </div>
                           </td>
                           <td style={{ padding: "13px 16px", textAlign: "center" }}>
                             {!multi && <Badge status={solo?.status} />}
@@ -359,6 +465,16 @@ export default function App() {
                                 campfireID={solo?.campfire_id}
                                 initial={solo?.notes || ""}
                                 onSave={saveNote}
+                              />
+                            )}
+                          </td>
+                          <td style={{ padding: "13px 8px" }}>
+                            {!multi && (
+                              <OverrideCell
+                                campfireID={solo?.campfire_id}
+                                calculatedArr={solo?.arr_usd || 0}
+                                initial={solo?.arr_override || 0}
+                                onSave={saveOverride}
                               />
                             )}
                           </td>
@@ -394,6 +510,14 @@ export default function App() {
                                 campfireID={c.campfire_id}
                                 initial={c.notes || ""}
                                 onSave={saveNote}
+                              />
+                            </td>
+                            <td style={{ padding: "10px 8px" }}>
+                              <OverrideCell
+                                campfireID={c.campfire_id}
+                                calculatedArr={c.arr_usd || 0}
+                                initial={c.arr_override || 0}
+                                onSave={saveOverride}
                               />
                             </td>
                           </tr>

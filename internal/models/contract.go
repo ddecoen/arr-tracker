@@ -67,6 +67,10 @@ type Contract struct {
 	LastModifiedAt     time.Time `json:"last_modified_at"`
 	SyncedAt           time.Time `json:"synced_at"`
 	Notes              string    `json:"notes"`
+	// ArrOverride: when non-zero, used instead of ARRUSD for all ARR totals.
+	// Set manually for edge cases (contract modifications, step-up deals, credits).
+	// Never overwritten by sync.
+	ArrOverride        float64   `json:"arr_override"`
 }
 
 // Summary is the aggregated ARR view returned by /api/summary.

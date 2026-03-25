@@ -35,6 +35,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/contracts", h.withCORS(h.handleContracts))
 	mux.HandleFunc("/api/sync",      h.withCORS(h.handleSync))
 	mux.HandleFunc("/api/health",    h.withCORS(h.handleHealth))
+	mux.HandleFunc("/api/note",      h.withCORS(h.handleNote))
+	mux.HandleFunc("/api/override",  h.withCORS(h.handleOverride))
 
 	// Serve the React frontend for all other routes
 	mux.Handle("/", http.FileServer(http.Dir("./web/dist")))
@@ -183,6 +185,63 @@ func (h *Handler) StartScheduler() {
 			}
 		}
 	}()
+}
+
+// handleOverride saves or clears an ARR override for a contract.
+// PUT /api/override?id=CAMPFIRE_ID  body: {"arr_override": 2568500}
+// Send 0 to clear the override.
+func (h *Handler) handleOverride(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		ArrOverride float64 `json:"arr_override"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	idStr := r.URL.Query().Get("id")
+	var campfireID int
+	if _, err := fmt.Sscanf(idStr, "%d", &campfireID); err != nil || campfireID == 0 {
+		jsonError(w, "missing or invalid id param", http.StatusBadRequest)
+		return
+	}
+	if err := h.db.UpdateArrOverride(campfireID, body.ArrOverride); err != nil {
+		jsonError(w, "failed to save override", http.StatusInternalServerError)
+		log.Printf("ERROR override: %v", err)
+		return
+	}
+	jsonOK(w, map[string]string{"status": "ok"})
+}
+
+// handleNote saves or clears a note for a contract.
+// PUT /api/note?id=CAMPFIRE_ID  body: {"note": "text"}
+func (h *Handler) handleNote(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		Note string `json:"note"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	idStr := r.URL.Query().Get("id")
+	var campfireID int
+	if _, err := fmt.Sscanf(idStr, "%d", &campfireID); err != nil || campfireID == 0 {
+		jsonError(w, "missing or invalid id param", http.StatusBadRequest)
+		return
+	}
+	if err := h.db.UpdateNote(campfireID, body.Note); err != nil {
+		jsonError(w, "failed to save note", http.StatusInternalServerError)
+		log.Printf("ERROR note: %v", err)
+		return
+	}
+	jsonOK(w, map[string]string{"status": "ok"})
 }
 
 // parseAsOf reads the ?as_of=YYYY-MM-DD query param, defaulting to today.
