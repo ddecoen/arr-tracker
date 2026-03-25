@@ -124,10 +124,11 @@ func NormalizeContract(c models.CampfireContract) (models.Contract, error) {
 	if !startDate.IsZero() && !endDate.IsZero() && endDate.After(startDate) {
 		contractDays = endDate.Sub(startDate).Hours()/24 + 1 // +1: end date is inclusive
 		contractMonths = math.Round(contractDays/30.4375*100) / 100
-		// Normalized: convert exact days to fractional years, then multiply by 365
-		// e.g. 731 calendar days → 731/365.25 years → × 365 ≈ 730.0 normalized days
-		fractionalYears := contractDays / 365.25
-		normalizedDays = math.Round(fractionalYears*365*100) / 100
+		// Normalized: round to nearest whole year × 365
+		// e.g. 731 calendar days → round(731/365.25) = 2 years → 2 × 365 = 730 days
+		// This matches Salesforce (seats × annual rate) for whole-year contracts.
+		wholeYears := math.Round(contractDays / 365.25)
+		normalizedDays = wholeYears * 365
 	}
 
 	var arr float64
