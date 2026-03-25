@@ -6,6 +6,8 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/coder/arr-tracker/internal/models"
@@ -91,6 +93,22 @@ func (c *Client) fetchContractsPage(offset int, sinceTime *time.Time) ([]models.
 	return result.Results, result.Count, nil
 }
 
+// parseSFDCARR parses the custom_field_arr value from Campfire/SFDC.
+// The field may come in as "$3,006,000.00", "3006000", "3006000.00", or empty.
+// Returns 0 if the value is missing or unparseable.
+func parseSFDCARR(raw string) float64 {
+	if raw == "" {
+		return 0
+	}
+	// Strip currency symbols, commas, spaces
+	cleaned := strings.NewReplacer("$", "", ",", "", " ", "").Replace(raw)
+	v, err := strconv.ParseFloat(cleaned, 64)
+	if err != nil {
+		return 0
+	}
+	return math.Round(v*100) / 100
+}
+
 // NormalizeContract converts a raw Campfire contract into a normalized Contract
 // ready for database storage, including ARR calculations.
 func NormalizeContract(c models.CampfireContract) (models.Contract, error) {
@@ -107,15 +125,6 @@ func NormalizeContract(c models.CampfireContract) (models.Contract, error) {
 	startDate, _ := time.Parse("2006-01-02", c.ContractStartDate)
 	endDate, _ := time.Parse("2006-01-02", c.ContractEndDate)
 
-	// ARR methodology (Coder):
-	//   ARR = (total_contract_value / contract_days) * 365
-	//
-	//   Uses exact day count for maximum precision — avoids month-length approximations.
-	//   Consistent with the 85/15 SSP allocation used in ASC 606 revenue recognition.
-	//   MRR is NOT used because it reflects only the support component post-allocation.
-	//
-	//   USD normalization uses exchange_rate locked at contract signing (spot-rate
-	//   methodology), so non-USD contracts are not re-measured at current rates.
 	var contractDays float64
 	var contractMonths float64 // retained for display purposes (approx months shown in UI)
 	if !startDate.IsZero() && !endDate.IsZero() && endDate.After(startDate) {
@@ -123,8 +132,18 @@ func NormalizeContract(c models.CampfireContract) (models.Contract, error) {
 		contractMonths = math.Round(contractDays/30.4375*100) / 100
 	}
 
+	// ARR methodology (Coder):
+	//
+	//   Primary source: custom_field_arr from Salesforce (via Campfire).
+	//   This matches the SFDC ARR figure (seats × annual rate) which is the
+	//   standard non-GAAP go-to-market metric used in board decks and investor reporting.
+	//
+	//   Fallback: TCV / contract_days * 365 for contracts without a SFDC ARR field
+	//   (e.g. contracts entered directly in Campfire, or non-SFDC-sourced deals).
 	var arr float64
-	if contractDays > 0 {
+	if sfdcARR := parseSFDCARR(c.CustomFieldARR); sfdcARR > 0 {
+		arr = sfdcARR
+	} else if contractDays > 0 {
 		arr = math.Round((c.TotalContractValue/contractDays)*365*100) / 100
 	}
 
