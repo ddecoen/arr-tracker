@@ -10,7 +10,14 @@ const fmtShort = (n) => {
 };
 // Parse YYYY-MM-DD as local date to avoid UTC-to-local timezone shift
 const parseLocalDate = (s) => { if (!s) return null; const [y,m,d] = s.split("-"); return new Date(y, m-1, d); };
-const fmtDate = (s) => s ? parseLocalDate(s).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "—";
+// fmtDate handles both YYYY-MM-DD contract dates and full ISO timestamps
+const fmtDate = (s) => {
+  if (!s) return "—";
+  // Full ISO timestamp (e.g. last_synced_at) — let JS parse normally
+  if (s.includes("T") || s.includes("Z")) return new Date(s).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+  // Plain date string YYYY-MM-DD — parse as local to avoid timezone shift
+  return parseLocalDate(s).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+};
 
 function StatCard({ label, value, sub, accent }) {
   return (
@@ -574,7 +581,7 @@ export default function App() {
         </div>
 
         <div style={{ marginTop: 16, fontSize: 12, color: "#9ca3af", textAlign: "right" }}>
-          ARR = Salesforce ARR field (primary) or TCV ÷ Days × 365 (fallback) &nbsp;·&nbsp;
+          ARR = TCV ÷ Normalized Days × 365 (365-day year convention) &nbsp;·&nbsp;
           Non-USD converted at signing-date spot rate &nbsp;·&nbsp;
           Auto-refreshes every 24h
         </div>
