@@ -8,7 +8,9 @@ const fmtShort = (n) => {
   if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}K`;
   return fmt.format(n);
 };
-const fmtDate = (s) => s ? new Date(s).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "—";
+// Parse YYYY-MM-DD as local date to avoid UTC-to-local timezone shift
+const parseLocalDate = (s) => { if (!s) return null; const [y,m,d] = s.split("-"); return new Date(y, m-1, d); };
+const fmtDate = (s) => s ? parseLocalDate(s).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "—";
 
 function StatCard({ label, value, sub, accent }) {
   return (
@@ -194,7 +196,9 @@ export default function App() {
   const [syncing, setSyncing]     = useState(false);
   const [syncMsg, setSyncMsg]     = useState(null);
   const [search, setSearch]       = useState("");
-  const [asOf, setAsOf]           = useState(new Date().toISOString().split("T")[0]);
+  // Use local date for asOf to avoid timezone shift
+  const todayLocal = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; };
+  const [asOf, setAsOf]           = useState(todayLocal());
   const [expanded, setExpanded]   = useState({});
   const [expandAll, setExpandAll] = useState(false);
 
@@ -319,7 +323,7 @@ export default function App() {
                 style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 13, color: "#111827", background: "white", cursor: "pointer", outline: "none" }}
               />
               <button
-                onClick={() => setAsOf(new Date().toISOString().split("T")[0])}
+                onClick={() => setAsOf(todayLocal())}
                 style={{ padding: "7px 12px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 12, color: "#6b7280", background: "white", cursor: "pointer" }}
               >
                 Today
