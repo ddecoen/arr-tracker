@@ -109,37 +109,21 @@ func NormalizeContract(c models.CampfireContract) (models.Contract, error) {
 
 	// ARR methodology (Coder):
 	//
-	//   ARR = TCV / normalized_days * 365
+	//   ARR = TCV / contract_days * 365
 	//
-	//   normalized_days uses a 365-day year convention (not exact calendar days).
-	//   A 1-year contract = 365 days, 2-year = 730, 3-year = 1095, etc.
-	//   This matches the Salesforce ARR calculation (seats × annual rate) and avoids
-	//   leap year distortion. ARR is a non-GAAP go-to-market metric — consistency
-	//   with SFDC is more important than calendar precision here.
-	//
-	//   contractDays (exact calendar days, +1 inclusive) is retained for display only.
-	var contractDays float64    // exact calendar days, for display
-	var normalizedDays float64  // 365-day year convention, for ARR calc
-	var contractMonths float64  // approximate months, for display
+	//   Uses exact calendar days (+1 inclusive) for all contract lengths.
+	//   e.g. 394 days → ARR = TCV/394*365 (~92.6% of TCV, not equal to TCV)
+	//   e.g. 730 days → ARR = TCV/730*365 = TCV/2
+	var contractDays float64
+	var contractMonths float64
 	if !startDate.IsZero() && !endDate.IsZero() && endDate.After(startDate) {
 		contractDays = endDate.Sub(startDate).Hours()/24 + 1 // +1: end date is inclusive
 		contractMonths = math.Round(contractDays/30.4375*100) / 100
-		// Normalized days for ARR calculation:
-		//   - Contracts >= 1 year: round to nearest whole year × 365
-		//     e.g. 731 days → 2 years → 730 normalized days → matches Salesforce
-		//   - Contracts < 1 year (co-terms, partial periods): use exact calendar days
-		//     e.g. 327 days → 327 normalized days → correct annualized co-term ARR
-		if contractDays >= 365 {
-			wholeYears := math.Round(contractDays / 365.25)
-			normalizedDays = wholeYears * 365
-		} else {
-			normalizedDays = contractDays
-		}
 	}
 
 	var arr float64
-	if normalizedDays > 0 {
-		arr = math.Round((c.TotalContractValue/normalizedDays)*365*100) / 100
+	if contractDays > 0 {
+		arr = math.Round((c.TotalContractValue/contractDays)*365*100) / 100
 	}
 
 	exchangeRate := c.ExchangeRate
